@@ -1,0 +1,38 @@
+name: Litemall接口自动化测试
+
+on:
+  push:
+    branches: [ main, master ]  # 当你推送代码到主分支时触发
+  schedule:
+    - cron: '0 22 * * *'      # 每天北京时间早上 6:00 执行 (UTC 22:00)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest    # 使用最新版 Linux 虚拟环境
+
+    steps:
+      - name: 1. 拉取代码
+        uses: actions/checkout@v3
+
+      - name: 2. 安装 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 3. 安装依赖库
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 4. 执行测试并生成报告
+        # 这里会运行 pytest，并将结果生成到一个 html 文件中
+        run: |
+          pytest tests/test_login.py --html=report.html --self-contained-html
+        continue-on-error: true  # 即使测试用例失败，也要继续执行后面的“保存报告”步骤
+
+      - name: 5. 上传测试报告
+        # 将生成的 report.html 上传到 GitHub，方便点击下载查看
+        uses: actions/upload-artifact@v3
+        with:
+          name: pytest-report
+          path: report.html
