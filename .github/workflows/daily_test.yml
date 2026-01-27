@@ -25,23 +25,21 @@ jobs:
       - name: 4. 运行测试
         continue-on-error: true
         run: |
-          # 生成单个独立的 HTML 文件，方便直接查看
-          pytest --html=report.html --self-contained-html
+          python -m pytest tests/ --html=report.html --self-contained-html
 
       - name: 5. 发送邮件通知
-          uses: dawidd6/action-send-mail@v3
-          with:
-            server_address: smtp.qq.com
-            server_port: 465
-            # 关键点：QQ 邮箱 465 端口必须开启安全连接
-            secure: true
-            username: ${{ secrets.MAIL_USERNAME }}
-            password: ${{ secrets.MAIL_PASSWORD }}
-            subject: Litemall 自动化测试报告
-            to: 1143568940@qq.com
-            from: GitHub-Actions-Bot
-            attachments: report.html
-            body: |
-              自动化测试执行完毕。
-              
-              测试报告已作为附件发送（report.html），请直接下载后在浏览器中打开。
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.qq.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Litemall 自动化测试报告
+          # 注意：请务必把下面的邮箱换成你真实的接收邮箱，并保留单引号
+          to: '1143568940@qq.com'
+          from: 'GitHub-Actions-Bot'
+          attachments: report.html
+          body: |
+            您好，自动化测试已完成。
+            报告以 HTML 附件形式发送，请查收。
