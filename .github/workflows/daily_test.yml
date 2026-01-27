@@ -1,9 +1,13 @@
 name: Litemall接口自动化测试并发送邮件
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # 允许手动触发执行
+    push:
+      branches: [ main ]
+    workflow_dispatch: # 保留手动触发按钮
+    schedule:
+      # 每天北京时间 12:05 (UTC 04:05) 自动执行
+      # 格式：分 时 日 月 周
+      - cron: '5 4 * * *'
 
 jobs:
   build:
