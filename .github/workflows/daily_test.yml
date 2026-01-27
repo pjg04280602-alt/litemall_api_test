@@ -38,7 +38,7 @@ jobs:
             username: ${{ secrets.MAIL_USERNAME }}
             password: ${{ secrets.MAIL_PASSWORD }}
             subject: Litemall 自动化测试报告
-            to: '你的真实QQ号@qq.com'
+            to: '1143568940@qq.com'
             from: 'GitHub-Actions-Bot'
             attachments: report.html
             body: |
