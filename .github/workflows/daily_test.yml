@@ -3,10 +3,10 @@ name: Litemall接口自动化测试并发送邮件
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # 保留手动触发按钮
+  workflow_dispatch:
   schedule:
-    # 每天北京时间 13:00 (UTC 05:00) 自动执行
-    - cron: '0 5 * * *'
+    # 每天北京时间 14:00 (UTC 06:00) 自动执行
+    - cron: '0 6 * * *'
 
 jobs:
   build:
@@ -28,7 +28,6 @@ jobs:
       - name: 4. 运行自动化测试并生成结果数据
         continue-on-error: true
         run: |
-          # 增加 --junitxml 参数，用于 Python 解析结果
           python -m pytest tests/ --html=report.html --self-contained-html --junitxml=result.xml
 
       - name: 5. 执行 Python 脚本发送“可视化”邮件
@@ -45,7 +44,6 @@ jobs:
           from email.mime.application import MIMEApplication
           
           def get_test_stats():
-              """从 result.xml 解析测试统计数据"""
               try:
                   tree = ET.parse('result.xml')
                   root = tree.getroot()
@@ -57,7 +55,6 @@ jobs:
                       "skipped": testsuite.get('skipped', 0),
                       "time": testsuite.get('time', 0)
                   }
-                  # 计算通过数
                   stats["passed"] = int(stats["total"]) - int(stats["failures"]) - int(stats["errors"]) - int(stats["skipped"])
                   return stats
               except:
@@ -67,15 +64,11 @@ jobs:
               sender = os.environ.get('MAIL_USER')
               password = os.environ.get('MAIL_PASS')
               receiver = os.environ.get('RECEIVER')
-          
               stats = get_test_stats()
-          
               msg = MIMEMultipart()
               msg['Subject'] = "📊 Litemall 接口自动化测试报告"
               msg['From'] = f"QA-Bot <{sender}>"
               msg['To'] = receiver
-          
-              # 构建漂亮的正文 HTML
               if stats:
                   color = "#28a745" if int(stats['failures']) == 0 else "#dc3545"
                   html_body = f"""
@@ -96,16 +89,12 @@ jobs:
                   """
               else:
                   html_body = "测试执行完毕，但解析结果失败，请查看附件报告。"
-          
               msg.attach(MIMEText(html_body, 'html'))
-          
-              # 添加附件
               if os.path.exists("report.html"):
                   with open("report.html", "rb") as f:
                       part = MIMEApplication(f.read(), Name="report.html")
                       part['Content-Disposition'] = 'attachment; filename="report.html"'
                       msg.attach(part)
-          
               try:
                   server = smtplib.SMTP_SSL("smtp.qq.com", 465)
                   server.login(sender, password)
@@ -115,7 +104,6 @@ jobs:
               except Exception as e:
                   print(f"❌ 发送失败: {e}")
                   sys.exit(1)
-          
           if __name__ == "__main__":
               send_mail()
           EOF
