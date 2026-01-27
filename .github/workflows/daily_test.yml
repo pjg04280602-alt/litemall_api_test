@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m pytest tests/ --html=report.html --self-contained-html
 
-      - name: 5. 调试版邮件发送
+      - name: 5. 强力兼容版邮件发送
         env:
             MAIL_USER: ${{ secrets.MAIL_USERNAME }}
             MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
@@ -40,17 +40,18 @@ jobs:
             from email.mime.application import MIMEApplication
             
             try:
+                # 改用 587 端口
                 smtp_server = "smtp.qq.com"
-                smtp_port = 465
+                smtp_port = 587 
                 sender = os.environ['MAIL_USER']
                 password = os.environ['MAIL_PASS']
                 receiver = os.environ['RECEIVER']
             
                 msg = MIMEMultipart()
-                msg['Subject'] = "Litemall测试报告-调试版"
-                msg['From'] = sender
+                msg['Subject'] = "Litemall测试报告-587端口版"
+                msg['From'] = f"GitHub-Bot <{sender}>"
                 msg['To'] = receiver
-                msg.attach(MIMEText("测试正文", 'plain'))
+                msg.attach(MIMEText("测试报告已送达，详见附件。", 'plain'))
             
                 if os.path.exists("report.html"):
                     with open("report.html", "rb") as f:
@@ -58,17 +59,20 @@ jobs:
                         part['Content-Disposition'] = 'attachment; filename="report.html"'
                         msg.attach(part)
             
-                # 调试模式启动
-                print(f"正在尝试连接 {smtp_server}...")
-                server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-                print("连接成功，正在登录...")
+                print(f"1. 正在连接 {smtp_server}:{smtp_port}...")
+                server = smtplib.SMTP(smtp_server, smtp_port) # 注意这里改用 SMTP
+            
+                print("2. 正在尝试 STARTTLS 加密...")
+                server.starttls() 
+            
+                print("3. 正在登录...")
                 server.login(sender, password)
-                print("登录成功，正在发信...")
+            
+                print("4. 正在发信...")
                 server.sendmail(sender, [receiver], msg.as_string())
                 server.quit()
-                print("✨ 邮件已送达！")
+                print("✅ 成功！邮件已发出。")
             except Exception as e:
-                print("\n❌ 错误详情:")
-                print(str(e))
+                print(f"\n❌ 错误详情: {str(e)}")
                 exit(1)
             EOF
