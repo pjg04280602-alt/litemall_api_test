@@ -27,52 +27,48 @@ jobs:
         run: |
           python -m pytest tests/ --html=report.html --self-contained-html
 
-      - name: 5. 使用 Python 发送邮件
+      - name: 5. 调试版邮件发送
         env:
             MAIL_USER: ${{ secrets.MAIL_USERNAME }}
             MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
             RECEIVER: '1143568940@qq.com'
         run: |
             python - <<EOF
-            import smtplib
-            import os
+            import smtplib, os
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
             from email.mime.application import MIMEApplication
             
-            # 配置参数
-            smtp_server = "smtp.qq.com"
-            smtp_port = 465
-            sender = os.environ['MAIL_USER']
-            password = os.environ['MAIL_PASS']
-            receiver = os.environ['RECEIVER']
-            
-            # 创建邮件对象
-            msg = MIMEMultipart()
-            msg['Subject'] = "Litemall 自动化测试报告"
-            msg['From'] = f"GitHub-Bot <{sender}>"
-            msg['To'] = receiver
-            
-            # 邮件正文
-            body = "自动化测试已执行完毕，测试报告见附件。"
-            msg.attach(MIMEText(body, 'plain'))
-            
-            # 添加附件
             try:
-                with open("report.html", "rb") as f:
-                    part = MIMEApplication(f.read(), Name="report.html")
-                    part['Content-Disposition'] = 'attachment; filename="report.html"'
-                    msg.attach(part)
-            except Exception as e:
-                print(f"附件读取失败: {e}")
+                smtp_server = "smtp.qq.com"
+                smtp_port = 465
+                sender = os.environ['MAIL_USER']
+                password = os.environ['MAIL_PASS']
+                receiver = os.environ['RECEIVER']
             
-            # 发送邮件
-            try:
-                with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-                    server.login(sender, password)
-                    server.sendmail(sender, [receiver], msg.as_string())
-                print("邮件发送成功！")
+                msg = MIMEMultipart()
+                msg['Subject'] = "Litemall测试报告-调试版"
+                msg['From'] = sender
+                msg['To'] = receiver
+                msg.attach(MIMEText("测试正文", 'plain'))
+            
+                if os.path.exists("report.html"):
+                    with open("report.html", "rb") as f:
+                        part = MIMEApplication(f.read(), Name="report.html")
+                        part['Content-Disposition'] = 'attachment; filename="report.html"'
+                        msg.attach(part)
+            
+                # 调试模式启动
+                print(f"正在尝试连接 {smtp_server}...")
+                server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+                print("连接成功，正在登录...")
+                server.login(sender, password)
+                print("登录成功，正在发信...")
+                server.sendmail(sender, [receiver], msg.as_string())
+                server.quit()
+                print("✨ 邮件已送达！")
             except Exception as e:
-                print(f"邮件发送失败: {e}")
+                print("\n❌ 错误详情:")
+                print(str(e))
                 exit(1)
             EOF
