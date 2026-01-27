@@ -24,10 +24,11 @@ jobs:
           pip install pytest requests pytest-html
 
       - name: 4. 运行测试并生成报告
-        # 即使测试用例失败，也要继续执行后续步骤（为了上传报告）
         continue-on-error: true
         run: |
-          pytest --html=report.html --self-contained-htmlgit add .
+          pip install pytest-html
+          # 强制指定在当前目录下寻找 tests 文件夹
+          python -m pytest tests/ --html=report.html --self-contained-html
 
       - name: 5. 上传测试报告 (Artifacts v4)
         uses: actions/upload-artifact@v4
