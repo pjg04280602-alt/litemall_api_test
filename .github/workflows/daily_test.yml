@@ -1,9 +1,9 @@
-name: Litemall接口自动化测试
+name: Litemall接口自动化测试并发送邮件
 
 on:
   push:
-    branches: [ main ]  # 每次推送代码时触发
-  workflow_dispatch:    # 允许你在 GitHub 页面手动点击按钮运行
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,25 +13,37 @@ jobs:
       - name: 1. 检出代码
         uses: actions/checkout@v4
 
-      - name: 2. 设置 Python 环境
+      - name: 2. 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: 3. 安装依赖
         run: |
-          python -m pip install --upgrade pip
           pip install pytest requests pytest-html
 
-      - name: 4. 运行测试并生成报告
+      - name: 4. 运行测试
         continue-on-error: true
         run: |
-          pip install pytest-html
-          # 强制指定在当前目录下寻找 tests 文件夹
-          python -m pytest tests/ --html=report.html --self-contained-html
+          # 生成单个独立的 HTML 文件，方便直接查看
+          pytest --html=report.html --self-contained-html
 
-      - name: 5. 上传测试报告 (Artifacts v4)
-        uses: actions/upload-artifact@v4
+      - name: 5. 发送邮件通知
+        uses: dawidd6/action-send-mail@v3
         with:
-          name: litemall-test-report
-          path: report.html
+          # 邮件服务器设置 (以QQ邮箱为例)
+          server_address: smtp.qq.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          # 邮件内容设置
+          subject: Litemall 自动化测试报告通知
+          to: 1143568940@qq.com
+          from: GitHub Actions Tester
+          # 关键点：直接发送 HTML 文件作为附件（非压缩包）
+          attachments: report.html
+          body: |
+            您好，Litemall 接口自动化测试已执行完毕。
+            
+            测试结果详情请见附件中的 report.html 文件。
+            您可以直接在手机或电脑下载后用浏览器打开查看。
