@@ -2,22 +2,35 @@ name: Litemall接口自动化测试
 
 on:
   push:
-    branches: [ main ]  # 每次你 push 就会触发
+    branches: [ main ]  # 每次推送代码时触发
+  workflow_dispatch:    # 允许你在 GitHub 页面手动点击按钮运行
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: 设置 Python
+    steps:
+      - name: 1. 检出代码
+        uses: actions/checkout@v4
+
+      - name: 2. 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 安装所有依赖
+      - name: 3. 安装依赖
         run: |
-          pip install pytest requests  # 直接安装这两个核心库
+          python -m pip install --upgrade pip
+          pip install pytest requests pytest-html
 
-      - name: 运行测试
-        run: pytest  # 它会自动扫描 tests/ 文件夹
+      - name: 4. 运行测试并生成报告
+        # 即使测试用例失败，也要继续执行后续步骤（为了上传报告）
+        continue-on-error: true
+        run: |
+          pytest --html=report.html --self-contained-htmlgit add .
+
+      - name: 5. 上传测试报告 (Artifacts v4)
+        uses: actions/upload-artifact@v4
+        with:
+          name: litemall-test-report
+          path: report.html
