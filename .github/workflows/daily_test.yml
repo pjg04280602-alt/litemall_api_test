@@ -32,7 +32,6 @@ jobs:
         with:
             server_address: smtp.qq.com
             server_port: 465
-            # 针对 465 端口必须开启 secure
             secure: true
             username: ${{ secrets.MAIL_USERNAME }}
             password: ${{ secrets.MAIL_PASSWORD }}
@@ -42,6 +41,4 @@ jobs:
             attachments: report.html
             body: |
               自动化测试执行完毕。
-              报告以 HTML 附件形式发送，请直接查收。
-            # 增加超时宽限，应对网络波动
-            connection_timeout: 30s
+              报告以 HTML 附件形式发送，请直接下载后查看。
