@@ -31,16 +31,17 @@ jobs:
         uses: dawidd6/action-send-mail@v3
         with:
             server_address: smtp.qq.com
-            # 切换到 587 端口
-            server_port: 587
-            # 在 587 端口下，secure 必须设为 false (它会随后自动升级到 STARTTLS)
-            secure: false
+            server_port: 465
+            # 针对 465 端口必须开启 secure
+            secure: true
             username: ${{ secrets.MAIL_USERNAME }}
             password: ${{ secrets.MAIL_PASSWORD }}
-            subject: Litemall 自动化测试报告
+            subject: Litemall 接口自动化测试报告
             to: '1143568940@qq.com'
             from: 'GitHub-Actions-Bot'
             attachments: report.html
             body: |
               自动化测试执行完毕。
               报告以 HTML 附件形式发送，请直接查收。
+            # 增加超时宽限，应对网络波动
+            connection_timeout: 30s
