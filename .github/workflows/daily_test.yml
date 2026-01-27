@@ -3,7 +3,7 @@ name: Litemall接口自动化测试并发送邮件
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发执行
 
 jobs:
   build:
@@ -13,65 +13,88 @@ jobs:
       - name: 1. 检出代码
         uses: actions/checkout@v4
 
-      - name: 2. 设置 Python
+      - name: 2. 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 3. 安装依赖
+      - name: 3. 安装项目依赖
         run: |
           pip install pytest requests pytest-html
 
-      - name: 4. 运行测试
+      - name: 4. 运行自动化测试
+        # 使用 continue-on-error 确保即便测试用例失败，也会执行发邮件步骤
         continue-on-error: true
         run: |
           python -m pytest tests/ --html=report.html --self-contained-html
 
-      - name: 5. 终极兼容版邮件发送
+      - name: 5. 执行 Python 脚本发送邮件
+        # 这里的 env 部分必须与 GitHub Settings 里的 Secret 名字完全对应
         env:
-            MAIL_USER: ${{ secrets.MAIL_USERNAME }}
-            MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
-            RECEIVER: '1143568940@qq.com'
+          MAIL_USER: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
+          # 请把下面这个改为你真实的接收邮箱
+          RECEIVER: '1143568940@qq.com'
         run: |
-            python - <<EOF
-            import smtplib, os, sys
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.application import MIMEApplication
-            
-            try:
-                # 尝试使用 exmail 备用网关，它对海外 IP 更友好
-                smtp_server = "smtp.exmail.qq.com"
-                smtp_port = 465
-                sender = os.environ['MAIL_USER']
-                password = os.environ['MAIL_PASS']
-                receiver = os.environ['RECEIVER']
-            
-                msg = MIMEMultipart()
-                msg['Subject'] = "Litemall 接口测试报告-自动发送"
-                msg['From'] = sender
-                msg['To'] = receiver
-                msg.attach(MIMEText("测试执行完毕，附件为最新测试报告。", 'plain'))
-            
-                if os.path.exists("report.html"):
-                    with open("report.html", "rb") as f:
-                        part = MIMEApplication(f.read(), Name="report.html")
-                        part['Content-Disposition'] = 'attachment; filename="report.html"'
-                        msg.attach(part)
-            
-                print(f"[*] 准备通过 {smtp_server} 发送...")
-                # 强制使用 SSL 环境
-                server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30)
-                server.set_debuglevel(1) # 开启底层日志，你会看到具体的认证过程
-            
-                print("[*] 正在验证身份...")
-                server.login(sender, password)
-            
-                print("[*] 正在投递邮件...")
-                server.sendmail(sender, [receiver], msg.as_string())
-                server.quit()
-                print("✅ 发送成功！请检查收件箱（包括垃圾箱）。")
-            except Exception as e:
-                print(f"\n❌ 错误详情: {str(e)}")
-                sys.exit(1)
-            EOF
+          python - <<EOF
+          import smtplib, os, sys
+          from email.mime.text import MIMEText
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.application import MIMEApplication
+
+          def send_mail():
+              # 从环境变量获取 Secret
+              sender = os.environ.get('MAIL_USER')
+              password = os.environ.get('MAIL_PASS')
+              receiver = os.environ.get('RECEIVER')
+
+              # 基础校验
+              if not sender or not password:
+                  print("❌ 错误: 无法读取 GitHub Secrets (MAIL_USERNAME 或 MAIL_PASSWORD)")
+                  sys.exit(1)
+
+              print(f"[*] 准备发信: 发件人={sender}, 收件人={receiver}")
+
+              # 构建邮件内容
+              msg = MIMEMultipart()
+              msg['Subject'] = "Litemall 接口自动化测试报告"
+              msg['From'] = f"GitHub-Actions-Bot <{sender}>"
+              msg['To'] = receiver
+              
+              body = "自动化测试已执行完成。详细结果请下载附件中的 HTML 报告并用浏览器打开。"
+              msg.attach(MIMEText(body, 'plain'))
+
+              # 添加附件
+              report_file = "report.html"
+              if os.path.exists(report_file):
+                  with open(report_file, "rb") as f:
+                      part = MIMEApplication(f.read(), Name=report_file)
+                      part['Content-Disposition'] = f'attachment; filename="{report_file}"'
+                      msg.attach(part)
+                  print(f"[*] 已成功加载附件: {report_file}")
+              else:
+                  print("[!] 未找到测试报告文件，将只发送纯文本邮件。")
+
+              # 连接服务器并发送
+              try:
+                  # QQ邮箱 465 端口强制使用 SSL
+                  print(f"[*] 正在连接 smtp.qq.com:465...")
+                  server = smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=30)
+                  
+                  # 开启详细日志，以便在 GitHub Actions 控制台排查
+                  server.set_debuglevel(1)
+                  
+                  print("[*] 正在验证身份...")
+                  server.login(sender, password)
+                  
+                  print("[*] 正在推送邮件...")
+                  server.sendmail(sender, [receiver], msg.as_string())
+                  server.quit()
+                  print("✅ 邮件发送成功！")
+              except Exception as e:
+                  print(f"\n❌ 发送失败，详细错误信息:\n{str(e)}")
+                  sys.exit(1)
+
+          if __name__ == "__main__":
+              send_mail()
+          EOF
