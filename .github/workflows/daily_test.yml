@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'  # 北京时间 14:00
+    - cron: '0 3 * * *'  # 北京时间 14:00
 
 jobs:
   build:
