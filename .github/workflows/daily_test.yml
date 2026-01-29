@@ -24,14 +24,14 @@ jobs:
         run: |
           pip install pytest requests pytest-html
 
-      - name: 4. 运行自动化测试并生成结果数据
+      - name: 4. 运行自动化测试
         continue-on-error: true
         run: |
           python -m pytest tests/ --html=report.html --self-contained-html --junitxml=result.xml
 
-      - name: 5. 执行 Python 脚本发送“可视化”邮件
+      - name: 5. 执行 Python 脚本发送邮件
+        if: always()
         env:
-          # 注意：这里的缩进已对齐 env 关键字
           MAIL_USER: ${{ secrets.MAIL_USERNAME }}
           MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
           RECEIVER: '1143568940@qq.com'
@@ -43,94 +43,83 @@ jobs:
           from email.mime.multipart import MIMEMultipart
           from email.mime.application import MIMEApplication
 
-          def get_wise_rate():
-              """获取实时汇率"""
+          def get_rate():
+              """双接口备份获取汇率"""
+              # 尝试 Wise 接口
               try:
                   url = "https://wise.com/web-api/v1/rates"
-                  params = {"source": "MYR", "target": "CNY"}
-                  headers = {"User-Agent": "Mozilla/5.0"}
-                  response = requests.get(url, params=params, headers=headers, timeout=10)
-                  return response.json()[0]['rate']
-              except Exception as e:
-                  print(f"获取汇率失败: {e}")
-                  return "未知"
+                  headers = {
+                      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                      "Referer": "https://wise.com/zh-cn/currency-converter/myr-to-cny-rate"
+                  }
+                  r = requests.get(url, params={"source":"MYR", "target":"CNY"}, headers=headers, timeout=10)
+                  if r.status_code == 200:
+                      return r.json()[0]['rate']
+              except:
+                  pass
+              
+              # 尝试公开备用接口
+              try:
+                  r = requests.get("https://api.exchangerate-api.com/v4/latest/MYR", timeout=10)
+                  return r.json()['rates']['CNY']
+              except:
+                  return "获取失败"
 
           def get_test_stats():
               try:
-                  if not os.path.exists('result.xml'):
-                      return None
+                  if not os.path.exists('result.xml'): return None
                   tree = ET.parse('result.xml')
                   root = tree.getroot()
-                  # 兼容不同的 junitxml 格式
-                  testsuite = root if root.tag == 'testsuite' else root[0]
-                  stats = {
-                      "total": testsuite.get('tests', '0'),
-                      "failures": testsuite.get('failures', '0'),
-                      "errors": testsuite.get('errors', '0'),
-                      "skipped": testsuite.get('skipped', '0'),
-                      "time": testsuite.get('time', '0')
+                  ts = root if root.tag == 'testsuite' else root[0]
+                  total = int(ts.get('tests', 0))
+                  fail = int(ts.get('failures', 0))
+                  err = int(ts.get('errors', 0))
+                  skip = int(ts.get('skipped', 0))
+                  return {
+                      "total": total, "failures": fail, "time": ts.get('time', 0),
+                      "passed": total - fail - err - skip
                   }
-                  stats["passed"] = int(stats["total"]) - int(stats["failures"]) - int(stats["errors"]) - int(stats["skipped"])
-                  return stats
-              except Exception as e:
-                  print(f"解析 XML 失败: {e}")
-                  return None
+              except: return None
 
-          def send_mail():
-              sender = os.environ.get('MAIL_USER')
-              password = os.environ.get('MAIL_PASS')
-              receiver = os.environ.get('RECEIVER')
-              
-              # 获取汇率和测试统计
-              exchange_rate = get_wise_rate()
+          def send():
+              rate = get_rate()
               stats = get_test_stats()
-              
+              sender = os.environ.get('MAIL_USER')
               msg = MIMEMultipart()
-              msg['Subject'] = f"📊 测试报告 | 今日汇率: {exchange_rate}"
+              msg['Subject'] = f"📊 测试报告 | 今日汇率: {rate}"
               msg['From'] = f"QA-Bot <{sender}>"
-              msg['To'] = receiver
-
+              msg['To'] = os.environ.get('RECEIVER')
+              
+              color = "#28a745" if stats and int(stats['failures']) == 0 else "#dc3545"
+              html = f"""
+              <html><body>
+                <h2 style="color: {color};">测试执行完毕</h2>
+                <h3 style="color: #007bff;">💱 汇率监控 (MYR -> CNY)</h3>
+                <p style="font-size: 20px;"><b>1 MYR = <span style="color: #e83e8c;">{rate}</span> CNY</b></p>
+              """
               if stats:
-                  color = "#28a745" if int(stats['failures']) == 0 else "#dc3545"
-                  html_body = f"""
-                  <html>
-                    <body>
-                      <h2 style="color: {color};">测试执行完毕</h2>
-                      <h3 style="color: #007bff;">💱 汇率监控</h3>
-                      <p><b>当前汇率：1 MYR = <span style="font-size: 18px; color: #e83e8c;">{exchange_rate}</span> CNY</b></p>
-                      <h3 style="color: #007bff;">🧪 测试统计</h3>
-                      <table border="1" style="border-collapse: collapse; width: 300px; text-align: center;">
-                        <tr style="background-color: #f2f2f2;"><th>项目</th><th>数量</th></tr>
-                        <tr><td>总用例数</td><td><b>{stats['total']}</b></td></tr>
-                        <tr style="color: green;"><td>通过数</td><td><b>{stats['passed']}</b></td></tr>
-                        <tr style="color: red;"><td>失败数</td><td><b>{stats['failures']}</b></td></tr>
-                        <tr><td>耗时</td><td>{stats['time']}s</td></tr>
-                      </table>
-                      <p>详细报告请查看邮件附件报告。</p>
-                    </body>
-                  </html>
+                  html += f"""
+                  <h3 style="color: #007bff;">🧪 测试统计</h3>
+                  <table border="1" style="border-collapse: collapse; text-align: center;">
+                    <tr style="background-color: #f2f2f2;"><th>项目</th><th>数量</th></tr>
+                    <tr><td>总用例</td><td>{stats['total']}</td></tr>
+                    <tr style="color: green;"><td>通过</td><td>{stats['passed']}</td></tr>
+                    <tr style="color: red;"><td>失败</td><td>{stats['failures']}</td></tr>
+                  </table>
                   """
-              else:
-                  html_body = f"测试执行完毕。当前汇率: {exchange_rate}。但解析结果数据失败。"
-
-              msg.attach(MIMEText(html_body, 'html'))
-
+              html += "</body></html>"
+              msg.attach(MIMEText(html, 'html'))
+              
               if os.path.exists("report.html"):
                   with open("report.html", "rb") as f:
                       part = MIMEApplication(f.read(), Name="report.html")
                       part['Content-Disposition'] = 'attachment; filename="report.html"'
                       msg.attach(part)
+              
+              s = smtplib.SMTP_SSL("smtp.qq.com", 465)
+              s.login(sender, os.environ.get('MAIL_PASS'))
+              s.sendmail(sender, [msg['To']], msg.as_string())
+              s.quit()
 
-              try:
-                  server = smtplib.SMTP_SSL("smtp.qq.com", 465)
-                  server.login(sender, password)
-                  server.sendmail(sender, [receiver], msg.as_string())
-                  server.quit()
-                  print("✅ 汇率+测试可视化邮件发送成功！")
-              except Exception as e:
-                  print(f"❌ 发送失败: {e}")
-                  sys.exit(1)
-
-          if __name__ == "__main__":
-              send_mail()
+          if __name__ == "__main__": send()
           EOF
