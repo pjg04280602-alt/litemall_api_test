@@ -3,7 +3,7 @@ import os
 
 
 def get_wise_rate():
-    # 方案 A: Wise 官方接口 (带上更全的 Header)
+    # --- 方案 A: Wise 官方接口 ---
     url_a = "https://wise.com/web-api/v1/rates"
     params = {"source": "MYR", "target": "CNY"}
     headers = {
@@ -12,45 +12,49 @@ def get_wise_rate():
     }
 
     try:
-        print("尝试从 Wise 获取汇率...")
+        print("正在尝试从 Wise 获取汇率...")
         resp = requests.get(url_a, params=params, headers=headers, timeout=10)
         if resp.status_code == 200:
-            return resp.json()[0]['rate']
+            rate = resp.json()[0]['rate']
+            print(f"Wise 接口调用成功: {rate}")
+            return rate
         else:
-            print(f"Wise 接口返回状态码: {resp.status_code}")
+            print(f"Wise 接口失效，状态码: {resp.status_code}")
     except Exception as e:
-        print(f"Wise 接口异常: {e}")
+        print(f"Wise 接口请求异常: {e}")
 
-    # 方案 B: 备用公开接口 (无需 Header，极其稳定)
+    # --- 方案 B: 备用公开接口 (无需 Header，极度稳定) ---
+    # 这是 fallback 方案，确保邮件永远不会显示“未知”
     url_b = "https://api.exchangerate-api.com/v4/latest/MYR"
     try:
-        print("Wise 失败，尝试备用接口...")
+        print("切换至备用公开接口...")
         resp = requests.get(url_b, timeout=10)
         if resp.status_code == 200:
             rate = resp.json()['rates']['CNY']
+            print(f"备用接口调用成功: {rate}")
             return rate
     except Exception as e:
-        print(f"备用接口也异常: {e}")
+        print(f"所有接口均已失效: {e}")
 
     return None
 
 
 def test_wise_exchange_rate():
-    """这是给 Pytest 调用的测试项"""
+    """Pytest 测试项"""
     rate = get_wise_rate()
 
-    # 断言汇率获取成功
-    assert rate is not None, "两个接口均未能获取到汇率数据"
+    # 只要有一个接口通了，测试就通过
+    assert rate is not None, "无法从任何接口获取汇率数据"
     assert rate > 0
 
-    print(f"\n当前最终采用汇率: 1 MYR = {rate} CNY")
-
-    # 写入文件供后续 Workflow 步骤读取
+    # 将结果写入文件，供 GitHub Actions 邮件步骤读取
     with open("rate_value.txt", "w") as f:
         f.write(str(rate))
 
+    print(f"\n今日汇率确认: 1 MYR = {rate} CNY")
+
 
 if __name__ == "__main__":
-    # 本地直接 python 运行调试
-    res = get_wise_rate()
-    print(f"最终结果: {res}")
+    # 方便你直接在 PyCharm 点击绿色箭头运行调试
+    result = get_wise_rate()
+    print(f"本地调试结果: {result}")
