@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: '0 3 * * *'  # 北京时间 14:00
+    - cron: '0 3 * * *'  # 北京时间 11:00
 
 jobs:
   build:
@@ -44,26 +44,38 @@ jobs:
           from email.mime.application import MIMEApplication
 
           def get_rate():
-              """双接口备份获取汇率"""
-              # 尝试 Wise 接口
+              """从 comparisons 接口精准提取汇率"""
               try:
-                  url = "https://wise.com/web-api/v1/rates"
+                  url = "https://wise.com/gateway/v4/comparisons"
+                  params = {
+                      "sourceCurrency": "MYR",
+                      "targetCurrency": "CNY",
+                      "sendAmount": "1000",
+                      "sourceCountry": "CN",
+                      "filter": "POPULAR",
+                      "includeWise": "true",
+                      "numberOfProviders": "3"
+                  }
                   headers = {
                       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                      "Referer": "https://wise.com/zh-cn/currency-converter/myr-to-cny-rate"
+                      "Content-Type": "application/json"
                   }
-                  r = requests.get(url, params={"source":"MYR", "target":"CNY"}, headers=headers, timeout=10)
+                  r = requests.get(url, params=params, headers=headers, timeout=15)
                   if r.status_code == 200:
-                      return r.json()[0]['rate']
-              except:
-                  pass
+                      data = r.json()
+                      providers = data.get('providers', [])
+                      for p in providers:
+                          if p.get('alias') == 'wise':
+                              rate = p.get('quotes', [{}])[0].get('rate')
+                              return float(rate)
+              except Exception as e:
+                  print(f"Wise 接口解析异常: {e}")
               
-              # 尝试公开备用接口
               try:
                   r = requests.get("https://api.exchangerate-api.com/v4/latest/MYR", timeout=10)
-                  return r.json()['rates']['CNY']
+                  return float(r.json()['rates']['CNY'])
               except:
-                  return "获取失败"
+                  return None
 
           def get_test_stats():
               try:
@@ -79,47 +91,31 @@ jobs:
                       "total": total, "failures": fail, "time": ts.get('time', 0),
                       "passed": total - fail - err - skip
                   }
-              except: return None
+              except:
+                  return None
 
           def send():
-              rate = get_rate()
+              raw_rate = get_rate()
+              if raw_rate is not None:
+                  raw_rate_5f = "{:.5f}".format(raw_rate)
+                  rate_index = raw_rate * 1000
+                  rate_index_text = "{:.2f}".format(rate_index)
+              else:
+                  raw_rate_5f = "获取失败"
+                  rate_index_text = "获取失败"
+
               stats = get_test_stats()
               sender = os.environ.get('MAIL_USER')
               msg = MIMEMultipart()
-              msg['Subject'] = f"📊 测试报告 | 今日汇率: {rate}"
+              msg['Subject'] = f"📊 测试报告 | 汇率指数: {rate_index_text}"
               msg['From'] = f"QA-Bot <{sender}>"
               msg['To'] = os.environ.get('RECEIVER')
-              
+
               color = "#28a745" if stats and int(stats['failures']) == 0 else "#dc3545"
               html = f"""
               <html><body>
                 <h2 style="color: {color};">测试执行完毕</h2>
                 <h3 style="color: #007bff;">💱 汇率监控 (MYR -> CNY)</h3>
-                <p style="font-size: 20px;"><b>1 MYR = <span style="color: #e83e8c;">{rate}</span> CNY</b></p>
-              """
-              if stats:
-                  html += f"""
-                  <h3 style="color: #007bff;">🧪 测试统计</h3>
-                  <table border="1" style="border-collapse: collapse; text-align: center;">
-                    <tr style="background-color: #f2f2f2;"><th>项目</th><th>数量</th></tr>
-                    <tr><td>总用例</td><td>{stats['total']}</td></tr>
-                    <tr style="color: green;"><td>通过</td><td>{stats['passed']}</td></tr>
-                    <tr style="color: red;"><td>失败</td><td>{stats['failures']}</td></tr>
-                  </table>
-                  """
-              html += "</body></html>"
-              msg.attach(MIMEText(html, 'html'))
-              
-              if os.path.exists("report.html"):
-                  with open("report.html", "rb") as f:
-                      part = MIMEApplication(f.read(), Name="report.html")
-                      part['Content-Disposition'] = 'attachment; filename="report.html"'
-                      msg.attach(part)
-              
-              s = smtplib.SMTP_SSL("smtp.qq.com", 465)
-              s.login(sender, os.environ.get('MAIL_PASS'))
-              s.sendmail(sender, [msg['To']], msg.as_string())
-              s.quit()
-
-          if __name__ == "__main__": send()
-          EOF
+                <p style="font-size: 18px;">
+                    <b>原始汇率 (5位): <span style="color: #6c757d;">{raw_rate_5f}</span></b><br>
+                    <b>汇率指数 (x1000): <span style="color: #e83
