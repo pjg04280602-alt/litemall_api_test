@@ -36,7 +36,7 @@ jobs:
           MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
           RECEIVER: '1143568940@qq.com'
         run: |
-          python - <<EOF
+          python - <<'EOF'
           import smtplib, os, sys, requests
           import xml.etree.ElementTree as ET
           from email.mime.text import MIMEText
@@ -48,13 +48,9 @@ jobs:
               try:
                   url = "https://wise.com/gateway/v4/comparisons"
                   params = {
-                      "sourceCurrency": "MYR",
-                      "targetCurrency": "CNY",
-                      "sendAmount": "1000",
-                      "sourceCountry": "CN",
-                      "filter": "POPULAR",
-                      "includeWise": "true",
-                      "numberOfProviders": "3"
+                      "sourceCurrency": "MYR", "targetCurrency": "CNY",
+                      "sendAmount": "1000", "sourceCountry": "CN",
+                      "filter": "POPULAR", "includeWise": "true", "numberOfProviders": "3"
                   }
                   headers = {
                       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -85,11 +81,9 @@ jobs:
                   ts = root if root.tag == 'testsuite' else root[0]
                   total = int(ts.get('tests', 0))
                   fail = int(ts.get('failures', 0))
-                  err = int(ts.get('errors', 0))
-                  skip = int(ts.get('skipped', 0))
                   return {
-                      "total": total, "failures": fail, "time": ts.get('time', 0),
-                      "passed": total - fail - err - skip
+                      "total": total, "failures": fail,
+                      "passed": total - fail - int(ts.get('skipped', 0))
                   }
               except:
                   return None
@@ -118,4 +112,24 @@ jobs:
                 <h3 style="color: #007bff;">💱 汇率监控 (MYR -> CNY)</h3>
                 <p style="font-size: 18px;">
                     <b>原始汇率 (5位): <span style="color: #6c757d;">{raw_rate_5f}</span></b><br>
-                    <b>汇率指数 (x1000): <span style="color: #e83
+                    <b>汇率指数 (x1000): <span style="color: #e83e8c; font-size: 26px;">{rate_index_text}</span></b>
+                </p>
+              """
+              if stats:
+                  html += f"""
+                  <h3 style="color: #007bff;">🧪 测试统计</h3>
+                  <table border="1" style="border-collapse: collapse; text-align: center; width: 240px;">
+                    <tr style="background-color: #f2f2f2;"><th>项目</th><th>数量</th></tr>
+                    <tr><td>总用例</td><td>{stats['total']}</td></tr>
+                    <tr style="color: green;"><td>通过</td><td>{stats['passed']}</td></tr>
+                    <tr style="color: red;"><td>失败</td><td>{stats['failures']}</td></tr>
+                  </table>
+                  """
+              html += "</body></html>"
+              msg.attach(MIMEText(html, 'html'))
+
+              if os.path.exists("report.html"):
+                  with open("report.html", "rb") as f:
+                      part = MIMEApplication(f.read(), Name="report.html")
+                      part['Content-Disposition'] = 'attachment; filename="report.html"'
+                      msg.attach(part)
