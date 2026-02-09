@@ -32,6 +32,7 @@ jobs:
       - name: 5. 执行 Python 脚本发送邮件
         if: always()
         env:
+          # 💡 确保 GitHub Settings -> Secrets 中这两个名字准确无误
           MAIL_USER: ${{ secrets.MAIL_USERNAME }}
           MAIL_PASS: ${{ secrets.MAIL_PASSWORD }}
           RECEIVER: '1143568940@qq.com'
@@ -75,7 +76,9 @@ jobs:
 
           def get_test_stats():
               try:
-                  if not os.path.exists('result.xml'): return None
+                  if not os.path.exists('result.xml'): 
+                      print("未找到 result.xml, 将不显示测试统计")
+                      return None
                   tree = ET.parse('result.xml')
                   root = tree.getroot()
                   ts = root if root.tag == 'testsuite' else root[0]
@@ -85,34 +88,45 @@ jobs:
                       "total": total, "failures": fail,
                       "passed": total - fail - int(ts.get('skipped', 0))
                   }
-              except:
+              except Exception as e:
+                  print(f"解析统计数据异常: {e}")
                   return None
 
           def send():
+              # 1. 变量检查
+              sender = os.environ.get('MAIL_USER')
+              password = os.environ.get('MAIL_PASS')
+              receiver = os.environ.get('RECEIVER')
+              
+              if not sender or not password:
+                  print("❌ 错误: 环境变量 MAIL_USER 或 MAIL_PASS 未配置！请检查 GitHub Secrets")
+                  return
+
+              # 2. 获取数据
               raw_rate = get_rate()
               if raw_rate is not None:
                   raw_rate_5f = "{:.5f}".format(raw_rate)
-                  rate_index = raw_rate * 1000
-                  rate_index_text = "{:.2f}".format(rate_index)
+                  rate_index_text = "{:.2f}".format(raw_rate * 1000)
               else:
                   raw_rate_5f = "获取失败"
                   rate_index_text = "获取失败"
 
               stats = get_test_stats()
-              sender = os.environ.get('MAIL_USER')
+              
+              # 3. 构造邮件
               msg = MIMEMultipart()
               msg['Subject'] = f"📊 测试报告 | 汇率指数: {rate_index_text}"
               msg['From'] = f"QA-Bot <{sender}>"
-              msg['To'] = os.environ.get('RECEIVER')
+              msg['To'] = receiver
 
               color = "#28a745" if stats and int(stats['failures']) == 0 else "#dc3545"
               html = f"""
               <html><body>
-                <h2 style="color: {color};">测试执行完毕</h2>
+                <h2 style="color: {color};">自动化测试执行完毕</h2>
                 <h3 style="color: #007bff;">💱 汇率监控 (MYR -> CNY)</h3>
-                <p style="font-size: 18px;">
-                    <b>原始汇率 (5位): <span style="color: #6c757d;">{raw_rate_5f}</span></b><br>
-                    <b>汇率指数 (x1000): <span style="color: #e83e8c; font-size: 26px;">{rate_index_text}</span></b>
+                <p style="font-size: 16px;">
+                    原始汇率 (5位): <span style="color: #6c757d;">{raw_rate_5f}</span><br>
+                    <b>汇率指数 (x1000): <span style="color: #e83e8c; font-size: 24px;">{rate_index_text}</span></b>
                 </p>
               """
               if stats:
@@ -128,8 +142,24 @@ jobs:
               html += "</body></html>"
               msg.attach(MIMEText(html, 'html'))
 
+              # 4. 附件处理
               if os.path.exists("report.html"):
                   with open("report.html", "rb") as f:
                       part = MIMEApplication(f.read(), Name="report.html")
-                      part['Content-Disposition'] = 'attachment; filename="report.html"'
+                      part.add_header('Content-Disposition', 'attachment', filename="report.html")
                       msg.attach(part)
+
+              # 5. 发送
+              try:
+                  print(f"正在尝试发送邮件至 {receiver}...")
+                  s = smtplib.SMTP_SSL("smtp.qq.com", 465)
+                  s.login(sender, password)
+                  s.sendmail(sender, [receiver], msg.as_string())
+                  s.quit()
+                  print("✅ 邮件发送成功！")
+              except Exception as e:
+                  print(f"❌ 邮件发送失败: {e}")
+
+          if __name__ == "__main__":
+              send()
+          EOF
